@@ -33,6 +33,8 @@ const reviewSchema = new mongoose.Schema(
   }
 );
 
+reviewSchema.index({ tour: 1, user: 1 }, { unique: true });
+
 reviewSchema.pre(/^find/, function (next) {
   this.populate({
     path: 'user',
@@ -55,15 +57,31 @@ reviewSchema.statics.calcAverageRatings = async function (tourId) {
     },
   ]);
 
-  await Tour.findByIdAndUpdate(tourId, {
-    ratingsQuantity: stats[0],
-    ratingsAverage: stats[1],
-  });
+  if (stats.length > 0) {
+    await Tour.findByIdAndUpdate(tourId, {
+      ratingsQuantity: stats[0],
+      ratingsAverage: stats[1],
+    });
+  } else {
+    await Tour.findByIdAndUpdate(tourId, {
+      ratingsQuantity: 0,
+      ratingsAverage: 4.5,
+    });
+  }
 };
 
 reviewSchema.post('save', function () {
   //this points to current review
   this.constructor.calcAverageRatings(this.tour); //Não da pra deixar this.Review pq ainda n foi definido
+});
+
+reviewSchema.pre(/^findOneAnd/, async function (next) {
+  this.r = await this.findOne(); //passa o doc pra uma variavel temporaria pro middleware de post poder acessar
+  next();
+});
+
+reviewSchema.post(/^findOneAnd/, async function () {
+  this.r.constructor.calcAverageRatings(this.r.tour); //acessa o doc
 });
 
 const Review = mongoose.model('Review', reviewSchema);
